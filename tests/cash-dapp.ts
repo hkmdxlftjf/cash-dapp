@@ -55,24 +55,34 @@ describe("cash-dapp", () => {
   it("deposit funds", async () => {
     console.log("Deposit funds...");
     // 存款
-    try {
-      const tx = await program.methods
-        .depositFunds(new anchor.BN(LAMPORTS_PER_SOL))
-        .accounts({
-          cashAccount: cashAccountPda,
-          signer: user.publicKey, // 使用公钥，自动包装为 AccountInfo
-          systemProgram: anchor.web3.SystemProgram.programId,
-        })
-        .signers([user])
-        .rpc(
-          { skipPreflight: true }
-        );
-      console.log("Deposit funds Signature: ", tx);
-    } catch (error) {
-      console.error("Error during deposit: ", error);
-    }
+    const tx = await program.methods
+      .depositFunds(new anchor.BN(LAMPORTS_PER_SOL))
+      .accounts({
+        cashAccount: cashAccountPda,
+        signer: user.publicKey, // 使用公钥，自动包装为 AccountInfo
+        systemProgram: anchor.web3.SystemProgram.programId,
+      })
+      .signers([user])
+      .rpc({ skipPreflight: true });
+    
+    console.log("Deposit funds Signature: ", tx);
     // 验证余额增加
     const accountInfo = await provider.connection.getAccountInfo(cashAccountPda);
     console.log("Account Info: ", accountInfo);
+    // console.log("Balance: ", accountInfo.lamports);
   });
+
+  it("withdraw funds", async () => {
+    console.log("WithdrawFunds ...")
+
+    const tx = await program.methods.withdrawFunds(new anchor.BN(LAMPORTS_PER_SOL * 0.5))
+      .accounts({
+        cashAccount: cashAccountPda,
+        signer: user.publicKey, 
+        systemProgram: anchor.web3.SystemProgram.programId,
+      }).signers([user]).rpc({ skipPreflight: true });
+    
+    console.log("Withdraw funds Signature: ", tx);
+  });
+
 });

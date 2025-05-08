@@ -1,7 +1,8 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::{program::invoke, system_instruction};
+use anchor_lang::system_program;
 
-declare_id!("AsATHFvoeY6BdJysgSuFn8GjVFPq7ZfgsLUeaVXiR5YA");
+declare_id!("3mAzfMT32KMzGQe1qibqvjRZnpWHoF7yX2GPLqHJtDx5");
 
 #[program]
 pub mod cash_dapp {
@@ -33,36 +34,65 @@ pub mod cash_dapp {
     }
 
     pub fn deposit_funds(ctx: Context<DepositFunds>, amount: u64) -> Result<()> {
-        require!(amount > 0, ErrorCode::InvalidAmount);
-        
-        let ix = system_instruction::transfer(&ctx.accounts.signer.key(),
-            ctx.accounts.cash_account.to_account_info().key, 
+        let transfer_instruction = anchor_lang::solana_program::system_instruction::transfer(
+            ctx.accounts.signer.key,
+            ctx.accounts.cash_account.to_account_info().key,
             amount,
         );
-        
-        msg!("signer: {:?}", ctx.accounts.signer.key());
-        msg!("is signer: {:?}", ctx.accounts.signer.is_signer);
-        invoke(&ix,&[
-            ctx.accounts.signer.clone(),
-            ctx.accounts.cash_account.to_account_info(),
-        ])?;
+
+        anchor_lang::solana_program::program::invoke(
+            &transfer_instruction,
+            &[
+                ctx.accounts.signer.to_account_info(),
+                ctx.accounts.cash_account.to_account_info(),
+                ctx.accounts.system_program.to_account_info(),
+            ],
+        )?;
+
         Ok(())
     }
+
+    pub fn withdraw_funds(ctx: Context<WithdrawFunds>, amount: u64) -> Result<()> {
+        require!(amount > 0, ErrorCode::InvalidAmount);
+
+        let cash_account = &mut ctx.accounts.cash_account.to_account_info();
+        
+        let wallet = &mut ctx.accounts.signer.to_account_info();
+
+        **cash_account.try_borrow_mut_lamports()? -= amount;
+        **wallet.try_borrow_mut_lamports()? += amount;
+
+        Ok(())
+    }
+}
+
+
+#[derive(Accounts)]
+pub struct WithdrawFunds<'info> {
+
+    #[account(
+        mut,
+        seeds = [b"cash-account", signer.key().as_ref()],
+        bump
+    )]
+    pub cash_account: Account<'info, CashAccount>,
+
+    #[account(mut)]
+    pub signer: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
 pub struct DepositFunds<'info> {
     #[account(
-        mut, 
-        seeds = [b"cash-account", signer.key().as_ref()], 
-        bump
+        mut,
+        seeds = [b"cash-account", signer.key().as_ref()],
+        bump,
     )]
     pub cash_account: Account<'info, CashAccount>,
-    
-    /// CHECK: 这个账户只用于转移SOL，不用于数据存储。
-    #[account(mut)]
-    pub signer: AccountInfo<'info>,
-
+    #[account(mut, signer)] // 确保签名验证
+    pub signer: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
@@ -109,4 +139,8 @@ pub enum ErrorCode {
     // 无效签名者错误
     #[msg("Signer does not have access to call this instruction.")]
     InvalidSigner,
-
+    
+    // 转账失败错误
+    #[msg("Transfer operation failed to complete successfully.")]
+    TransferFailed,
+}
